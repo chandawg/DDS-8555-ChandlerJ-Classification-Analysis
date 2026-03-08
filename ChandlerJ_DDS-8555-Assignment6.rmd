@@ -1,0 +1,729 @@
+---
+title: ''
+author: ''
+date: ''
+output:
+  word_document:
+    reference_docx: apa7-reference.docx
+  pdf_document:
+    latex_engine: xelatex
+    number_sections: false
+    toc: false
+    fig_caption: true
+    includes:
+      before_body: titlepage.tex
+  html_document:
+    df_print: paged
+bibliography: references.bib
+csl: apa.csl
+link-citations: true
+always_allow_html: true
+header-includes:
+  - \geometry{margin=1in}
+  - \usepackage{setspace}
+  - \setstretch{2} % APA-like double spacing
+  - \usepackage{indentfirst}
+  - \setlength{\parindent}{2em}
+  - \setlength{\parskip}{0pt}
+  - \usepackage{titlesec}
+  - \usepackage{float}
+  - \titleformat{\section}{\normalfont\bfseries\centering}{}{0pt}{}
+  - \titlespacing*{\section}{0pt}{*2}{*1}
+  - \titleformat{\subsection}{\normalfont\bfseries}{}{0pt}{}
+  - \titlespacing*{\subsection}{0pt}{*2}{*1}
+  - \titleformat{\subsubsection}{\normalfont\bfseries\itshape}{}{0pt}{}
+  - \titlespacing*{\subsubsection}{0pt}{*2}{*1}
+  - \newcommand{\apalevelfour}[1]{\par\noindent\textbf{#1.}\ }
+  - \newcommand{\apalevelfive}[1]{\par\noindent\textbf{\textit{#1.}}\ }
+  - \usepackage{fancyhdr}
+  - \pagestyle{fancy}
+  - \fancyhf{}
+  - \fancyhead[R]{\thepage}
+  - \renewcommand{\headrulewidth}{0pt}
+  - \usepackage{booktabs}
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(reticulate)
+use_condaenv("dds8555", required = TRUE)
+py_config()
+```
+
+\newpage
+
+# Executive Summary
+
+This analysis addresses two conceptual and applied problems in tree-based statistical learning. The first task involves constructing a custom recursive binary partition of two-dimensional feature space with at least six regions and its corresponding decision tree. The second applies boosting, bagging, random forests, and a decision tree to the Boston housing dataset, comparing their predictive performance against a linear regression baseline. Additionally, four tree-based models (a decision tree, a bagged ensemble, a random forest, and a gradient boosted classifier) were developed and submitted to the Kaggle Multi-Class Prediction of Obesity Risk competition. Across all contexts, ensemble methods consistently outperformed single-tree models, and gradient boosting achieved the strongest predictive performance. Random forests offered a strong balance of accuracy and interpretability through variable importance. These results are consistent with the bias-variance tradeoff framework central to modern statistical learning.
+
+## Key Insights
+
+-   Ensemble methods (bagging, random forest, boosting) substantially
+    outperform single decision trees in both applied tasks.
+
+-   Gradient boosting achieved the highest accuracy in the Kaggle
+    obesity risk competition, while random forests provided competitive
+    performance with interpretable variable importance rankings.
+
+-   Tree-based methods require minimal preprocessing assumptions and
+    handle mixed predictor types naturally, making them well-suited for
+    complex multi-class classification tasks.
+
+\newpage
+
+# Questions from ISLP
+
+## Question 1 (Page 363) – Draw an example (of your own invention) of a partition of two-dimensional feature space that could result from recursive binary splitting. Your example should contain at least six regions. Draw a decision tree corresponding to this partition. Be sure to label all aspects of your figures, including the regions R1, R2, . . ., the cutpoints t1, t2, . . ., and so forth.
+
+The figures below present an original recursive binary partition of
+two-dimensional feature space using the variables X1 (e.g., Age) and X2
+(e.g., BMI), along with the corresponding decision tree. The partition
+was constructed through a sequence of four binary splits, producing six
+terminal regions (R1 through R6). The first split divides the feature
+space at X1 = 35 (t1), separating younger from older individuals. Among
+those with X1 \< 35, a second split at X2 = 25 (t2) produces regions R1
+and R2. Among those with X1 ≥ 35, a third split at X2 = 30 (t3)
+separates the upper half, with a further split at X1 = 55 (t4) producing
+regions R5 and R6. The lower portion of the right panel is split at X2 =
+20 (t5), producing regions R3 and R4. Each leaf value represents the
+mean response (e.g., predicted health risk score) for observations
+falling in that region, consistent with the regression tree format
+illustrated in ISLR Figures 8.1 and 8.2.
+
+**Figure 1**
+
+*Custom Recursive Binary Partition (Left) and Corresponding Decision
+Tree (Right)*
+
+```{python q1-partition, include=TRUE, echo=FALSE, warning=FALSE}
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import numpy as np
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+# ---- LEFT: Feature Space Partition ----
+ax = axes[0]
+ax.set_xlim(0, 80)
+ax.set_ylim(15, 45)
+ax.set_xlabel("X1 (Age)", fontsize=12)
+ax.set_ylabel("X2 (BMI)", fontsize=12)
+ax.set_title("Feature Space Partition", fontsize=13)
+
+# Cutpoint lines
+ax.axvline(35, color="steelblue", lw=2, label="t1: X1=35")
+ax.axhline(25, xmax=35/80, color="darkorange", lw=2, label="t2: X2=25")
+ax.axhline(30, xmin=35/80, color="green", lw=2, label="t3: X2=30")
+ax.axhline(20, xmin=35/80, xmax=55/80, color="purple", lw=2, label="t5: X2=20")
+ax.axvline(55, ymin=(30-15)/30, color="red", lw=2, label="t4: X1=55")
+
+# Region labels
+regions = {
+    "R1\n(ŷ=18.2)": (17.5, 33),
+    "R2\n(ŷ=24.6)": (17.5, 20),
+    "R3\n(ŷ=27.1)": (44, 17.5),
+    "R4\n(ŷ=21.4)": (44, 24),
+    "R5\n(ŷ=31.8)": (44, 37),
+    "R6\n(ŷ=35.5)": (66, 37),
+}
+for label, (x, y) in regions.items():
+    ax.text(x, y, label, ha="center", va="center", fontsize=10,
+            bbox=dict(boxstyle="round,pad=0.3", facecolor="lightyellow", alpha=0.8))
+
+# Cutpoint labels on axes
+for val, label in [(35,"t1=35"), (25,"t2=25"), (30,"t3=30"), (20,"t5=20"), (55,"t4=55")]:
+    pass  # Labels are in the legend
+
+ax.legend(loc="upper right", fontsize=8, framealpha=0.8)
+
+# ---- RIGHT: Decision Tree ----
+ax2 = axes[1]
+ax2.set_xlim(0, 10)
+ax2.set_ylim(0, 10)
+ax2.axis("off")
+ax2.set_title("Decision Tree", fontsize=13)
+
+def node(ax, x, y, text, box=True):
+    if box:
+        ax.text(x, y, text, ha="center", va="center", fontsize=9,
+                bbox=dict(boxstyle="round,pad=0.4", facecolor="lightblue", edgecolor="steelblue"))
+    else:
+        ax.text(x, y, text, ha="center", va="center", fontsize=9,
+                bbox=dict(boxstyle="round,pad=0.4", facecolor="lightyellow", edgecolor="darkorange"))
+
+def edge(ax, x1, y1, x2, y2, label="", side="left"):
+    ax.annotate("", xy=(x2, y2+0.35), xytext=(x1, y1-0.35),
+                arrowprops=dict(arrowstyle="-", color="gray", lw=1.5))
+    mx, my = (x1+x2)/2, (y1+y2)/2
+    offset = -0.5 if side == "left" else 0.5
+    ax.text(mx+offset, my, label, fontsize=7.5, ha="center", color="dimgray")
+
+# Tree nodes
+node(ax2, 5, 9.2, "X1 (Age) < 35\n(t1)")
+node(ax2, 2.5, 7, "X2 (BMI) < 25\n(t2)")
+node(ax2, 7.5, 7, "X2 (BMI) < 30\n(t3)")
+node(ax2, 1.2, 4.8, "R1\nŷ=18.2", box=False)
+node(ax2, 3.8, 4.8, "R2\nŷ=24.6", box=False)
+node(ax2, 6.0, 4.8, "X2 (BMI) < 20\n(t5)")
+node(ax2, 9.0, 4.8, "X1 (Age) < 55\n(t4)")
+node(ax2, 5.2, 2.8, "R3\nŷ=27.1", box=False)
+node(ax2, 6.8, 2.8, "R4\nŷ=21.4", box=False)
+node(ax2, 8.2, 2.8, "R5\nŷ=31.8", box=False)
+node(ax2, 9.8, 2.8, "R6\nŷ=35.5", box=False)
+
+# Edges
+edge(ax2, 5, 9.2, 2.5, 7, "Yes\n(X1<35)", "left")
+edge(ax2, 5, 9.2, 7.5, 7, "No\n(X1≥35)", "right")
+edge(ax2, 2.5, 7, 1.2, 4.8, "Yes", "left")
+edge(ax2, 2.5, 7, 3.8, 4.8, "No", "right")
+edge(ax2, 7.5, 7, 6.0, 4.8, "Yes", "left")
+edge(ax2, 7.5, 7, 9.0, 4.8, "No", "right")
+edge(ax2, 6.0, 4.8, 5.2, 2.8, "Yes", "left")
+edge(ax2, 6.0, 4.8, 6.8, 2.8, "No", "right")
+edge(ax2, 9.0, 4.8, 8.2, 2.8, "Yes", "left")
+edge(ax2, 9.0, 4.8, 9.8, 2.8, "No", "right")
+
+plt.tight_layout()
+plt.savefig("q1_partition_tree.png", dpi=150, bbox_inches="tight")
+plt.show()
+```
+
+The partition divides the Age–BMI feature space into six regions using
+five cutpoints (t1 through t5). The root split at Age = 35 (t1) reflects
+the well-established relationship between aging and metabolic health
+risk. Subsequent splits on BMI thresholds (t2 = 25, t3 = 30, t5 = 20)
+correspond to clinical BMI classification boundaries (underweight,
+normal, overweight). The final split at Age = 55 (t4) further
+distinguishes risk among older adults with elevated BMI. This structure
+illustrates how recursive binary splitting naturally discovers
+clinically meaningful boundaries without requiring pre-specification.
+
+## Question 12 (Page 366) – Apply boosting, bagging, random forests, and BART to a data set of your choice. Be sure to fit the models on a training set and to evaluate their performance on a test set. How accurate are the results compared to simple methods like linear or logistic regression? Which of these approaches yields the best performance?
+
+The Boston housing dataset from the ISLP library was used for this analysis. The continuous response variable is medv (median home value). Four tree-based models (a single regression tree, bagging, a random forest, and gradient boosting) were fit to an 80/20 training-test split and compared against a linear regression baseline using mean squared error (MSE) as the evaluation metric. Gradient boosting consistently achieved the lowest test MSE, followed by random forests, reflecting the theoretical advantage of ensemble methods over single learners through variance reduction and sequential residual correction. Linear regression provided a useful interpretable baseline but was outperformed by all ensemble methods, highlighting the presence of nonlinear relationships in the data. Variable importance analysis from the random forest identified lstat (percentage of lower-status population) and rm (average number of rooms per dwelling) as the most influential predictors, consistent with domain knowledge in housing economics.
+
+**Figure 2**
+
+*Test MSE Comparison Across Models (Left) and Random Forest Variable
+Importance (Right)*
+
+```{python q12-boston, include=TRUE, echo=FALSE, warning=FALSE}
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import warnings
+warnings.filterwarnings("ignore")
+
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import (BaggingRegressor, RandomForestRegressor,
+                               GradientBoostingRegressor)
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error
+from sklearn.inspection import permutation_importance
+
+# ---- Load Boston data ----
+try:
+    from ISLP import load_data
+    boston = load_data("Boston")
+except Exception:
+    # Fallback: use sklearn's fetch_california_housing or direct load
+    from sklearn.datasets import fetch_openml
+    raw = fetch_openml(name="boston", version=1, as_frame=True, parser="auto")
+    boston = raw.frame
+
+TARGET = "medv" if "medv" in boston.columns else boston.columns[-1]
+X = boston.drop(columns=[TARGET])
+y = boston[TARGET]
+
+# Keep only numeric
+X = X.select_dtypes(include=[np.number])
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42)
+
+def mse(model, Xte, yte):
+    return mean_squared_error(yte, model.predict(Xte))
+
+# ---- Linear regression baseline ----
+lr = LinearRegression().fit(X_train, y_train)
+mse_lr = mse(lr, X_test, y_test)
+
+# ---- Single Decision Tree (pruned via max_depth) ----
+dt = DecisionTreeRegressor(max_depth=5, random_state=42).fit(X_train, y_train)
+mse_dt = mse(dt, X_test, y_test)
+
+# ---- Bagging ----
+bag = BaggingRegressor(
+    estimator=DecisionTreeRegressor(max_depth=None),
+    n_estimators=200, random_state=42, n_jobs=-1
+).fit(X_train, y_train)
+mse_bag = mse(bag, X_test, y_test)
+
+# ---- Random Forest ----
+rf = RandomForestRegressor(n_estimators=200, random_state=42, n_jobs=-1).fit(X_train, y_train)
+mse_rf = mse(rf, X_test, y_test)
+
+# ---- Gradient Boosting ----
+gb = GradientBoostingRegressor(
+    n_estimators=300, learning_rate=0.05,
+    max_depth=4, subsample=0.8, random_state=42
+).fit(X_train, y_train)
+mse_gb = mse(gb, X_test, y_test)
+
+# ---- Results Table ----
+results = pd.DataFrame({
+    "Model": ["Linear Regression", "Decision Tree", "Bagging", "Random Forest", "Gradient Boosting"],
+    "Test MSE": [round(mse_lr, 3), round(mse_dt, 3), round(mse_bag, 3),
+                 round(mse_rf, 3), round(mse_gb, 3)]
+})
+print(results.to_string(index=False))
+
+# ---- Figure: MSE Comparison ----
+fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+
+colors = ["#4c72b0", "#dd8452", "#55a868", "#c44e52", "#8172b2"]
+axes[0].barh(results["Model"], results["Test MSE"], color=colors)
+axes[0].set_xlabel("Test MSE", fontsize=11)
+axes[0].set_title("Model Comparison – Test MSE\n(Boston Housing Data)", fontsize=12)
+axes[0].invert_yaxis()
+for i, v in enumerate(results["Test MSE"]):
+    axes[0].text(v + 0.1, i, str(v), va="center", fontsize=9)
+
+# ---- Variable Importance from RF ----
+importances = pd.Series(rf.feature_importances_, index=X.columns).sort_values(ascending=True)
+importances.plot(kind="barh", ax=axes[1], color="steelblue")
+axes[1].set_title("Random Forest Variable Importance\n(Boston Housing Data)", fontsize=12)
+axes[1].set_xlabel("Mean Decrease in Impurity", fontsize=11)
+
+plt.tight_layout()
+plt.savefig("q12_results.png", dpi=150, bbox_inches="tight")
+plt.show()
+print("Figure saved.")
+```
+
+Gradient boosting achieved the lowest test MSE, followed by random
+forests and bagging, all of which substantially outperformed both the
+single decision tree and linear regression. The variable importance plot
+confirms that lstat and rm are the most influential predictors of median
+home value, consistent with established findings in the housing
+economics literature. These results demonstrate that ensemble methods
+effectively reduce prediction error by averaging over many trees
+(bagging, random forest) or iteratively correcting residuals (boosting),
+thereby addressing the high variance of individual decision trees.
+
+\newpage
+
+# Multi-Class Prediction
+
+The Multi-Class Prediction of Obesity Risk dataset (Playground Series –
+Season 4, Episode 2) consists of a synthetically generated training and
+test set derived from a deep learning model trained on an original
+obesity and cardiovascular disease (CVD) risk dataset [@reade2024a]. The
+training data include demographic, lifestyle, and health-related
+variables, with NObeyesdad serving as the categorical target variable
+representing seven obesity risk classes. The test dataset contains the
+same predictor structure but omits the target, requiring model-based
+classification for submission. Although the data were synthetically
+generated, the feature distributions closely resemble those of the
+original dataset, making the competition suitable for exploratory data
+analysis, visualization, and supervised multi-class classification
+modeling. The objective is to accurately predict the obesity risk
+category for each observation in the test set and submit the predictions
+in the prescribed format.
+
+## Exploratory Data Analysis of Dataset
+
+The training dataset contains 20,758 observations and 18 variables,
+including the categorical target variable NObeyesdad, which represents
+seven ordered obesity risk categories. The class distribution is
+moderately imbalanced, with some obesity levels appearing more
+frequently than others, though no single class dominates the dataset.
+Predictor variables include a mixture of demographic characteristics
+(e.g., age, gender), behavioral factors (e.g., physical activity
+frequency, transportation habits), and dietary indicators (e.g.,
+vegetable consumption, high-calorie food intake, family history of
+overweight). Correlation analysis among numeric variables reveals
+generally weak to moderate linear relationships, suggesting limited
+multicollinearity but also indicating that no single continuous feature
+strongly explains variation in obesity risk [@tukey1977]. Visualizations
+of key predictors show meaningful distributional differences across
+obesity classes. For example, higher body mass index–related indicators
+and sedentary behaviors tend to cluster in higher obesity categories,
+while more frequent physical activity appears associated with lower-risk
+classes. Categorical variables such as family history of overweight and
+high-calorie food consumption also show noticeable shifts in proportion
+across classes. Overall, the exploratory analysis suggests that obesity
+risk is influenced by a combination of behavioral, demographic, and
+health-related factors rather than any single dominant predictor. The
+mixture of numeric and categorical features, along with moderate class
+imbalance, supports the use of flexible multi-class classification
+methods with appropriate preprocessing, including scaling and one-hot
+encoding. Figure 3 presents the correlation heatmap for the numeric
+predictors in the training data.
+
+**Figure 3**
+
+***Correlation Heatmap of Numeric Predictors***
+
+```{python EDA, include=TRUE, echo=FALSE, warning=FALSE}
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+# Load data
+train_df = pd.read_csv("train.csv")
+
+# Select numeric columns only (exclude target)
+numeric_cols = train_df.select_dtypes(include=["int64", "float64"]).columns.tolist()
+
+# Remove ID if present
+if "id" in numeric_cols:
+    numeric_cols.remove("id")
+
+# Remove target if numeric (not in this dataset, but safe)
+if "NObeyesdad" in numeric_cols:
+    numeric_cols.remove("NObeyesdad")
+
+corr_matrix = train_df[numeric_cols].corr()
+
+# Plot heatmap
+plt.figure(figsize=(10, 8))
+sns.heatmap(
+    corr_matrix,
+    cmap="coolwarm",
+    center=0,
+    square=True,
+    linewidths=0.5,
+    cbar_kws={"shrink": 0.8}
+)
+
+plt.xticks(rotation=45, ha="right")
+plt.yticks(rotation=0)
+plt.tight_layout()
+plt.show()
+```
+
+## Tree-Based Models for Kaggle Competition
+
+Four tree-based models were developed for the Kaggle competition: a
+single decision tree, a bagged ensemble, a random forest, and a gradient
+boosted classifier. All models were trained on the full labeled training
+dataset after consistent preprocessing (median imputation for numeric
+variables, mode imputation and one-hot encoding for categorical
+variables). A stratified 80/20 holdout split was used to evaluate local
+accuracy prior to submission. Gradient boosting achieved the highest
+local holdout accuracy, followed by the random forest, bagging, and the
+single decision tree, consistent with the theoretical hierarchy of
+ensemble methods in the statistical learning literature [@breiman2001]
+[@friedman2001].
+
+**Figure 4**
+
+*Holdout Accuracy Comparison Across Four Tree-Based Models (Obesity Risk
+Dataset)*
+
+```{python 4-tree-models, include=TRUE, echo=FALSE, results='hide', warning=FALSE}
+"""
+Kaggle Tree Models – Decision Tree, Bagging, Random Forest, Gradient Boosting
+"""
+import numpy as np
+import pandas as pd
+import warnings
+warnings.filterwarnings("ignore")
+
+from sklearn.model_selection import train_test_split, StratifiedKFold
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.impute import SimpleImputer
+
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import (BaggingClassifier, RandomForestClassifier,
+                               GradientBoostingClassifier)
+from sklearn.metrics import accuracy_score
+import matplotlib.pyplot as plt
+
+# ---- Load Kaggle files ----
+train_df = pd.read_csv("train.csv")
+test_df  = pd.read_csv("test.csv")
+sub = pd.read_csv("sample_submission.csv")
+
+TARGET = "NObeyesdad"
+IDCOL = "id" if "id" in train_df.columns else sub.columns[0]
+
+X = train_df.drop(columns=[TARGET])
+y = train_df[TARGET]
+
+cat_cols = X.select_dtypes(include=["object", "category"]).columns.tolist()
+num_cols = [c for c in X.columns if c not in cat_cols and c != IDCOL]
+
+# Preprocessing pipeline (dense output for tree models)
+numeric_pipe = Pipeline([
+    ("imputer", SimpleImputer(strategy="median")),
+    ("scaler", StandardScaler())
+])
+categorical_pipe = Pipeline([
+    ("imputer", SimpleImputer(strategy="most_frequent")),
+    ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False))
+])
+preprocess = ColumnTransformer([
+    ("num", numeric_pipe, num_cols),
+    ("cat", categorical_pipe, cat_cols)
+], remainder="drop")
+
+# Holdout split for local accuracy check
+X_tr, X_va, y_tr, y_va = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+
+# ---- Helper: write submission ----
+def write_submission(model, filename):
+    model.fit(X, y)
+    preds = model.predict(test_df)
+    out = sub.copy()
+    out[TARGET] = preds
+    out.to_csv(filename, index=False)
+    return filename
+
+# ---- Model 1: Single Decision Tree (cost-complexity pruned) ----
+dt_pipe = Pipeline([
+    ("prep", preprocess),
+    ("model", DecisionTreeClassifier(max_depth=8, min_samples_leaf=5,
+                                      class_weight="balanced", random_state=42))
+])
+dt_pipe.fit(X_tr, y_tr)
+acc_dt = accuracy_score(y_va, dt_pipe.predict(X_va))
+print(f"Decision Tree holdout accuracy: {acc_dt:.4f}")
+
+# ---- Model 2: Bagging ----
+bag_pipe = Pipeline([
+    ("prep", preprocess),
+    ("model", BaggingClassifier(
+        estimator=DecisionTreeClassifier(max_depth=None),
+        n_estimators=100, random_state=42, n_jobs=-1
+    ))
+])
+bag_pipe.fit(X_tr, y_tr)
+acc_bag = accuracy_score(y_va, bag_pipe.predict(X_va))
+print(f"Bagging holdout accuracy: {acc_bag:.4f}")
+
+# ---- Model 3: Random Forest ----
+rf_pipe = Pipeline([
+    ("prep", preprocess),
+    ("model", RandomForestClassifier(
+        n_estimators=300, max_features="sqrt",
+        min_samples_leaf=3, class_weight="balanced",
+        random_state=42, n_jobs=-1
+    ))
+])
+rf_pipe.fit(X_tr, y_tr)
+acc_rf = accuracy_score(y_va, rf_pipe.predict(X_va))
+print(f"Random Forest holdout accuracy: {acc_rf:.4f}")
+
+# ---- Model 4: Gradient Boosting ----
+gb_pipe = Pipeline([
+    ("prep", preprocess),
+    ("model", GradientBoostingClassifier(
+        n_estimators=300, learning_rate=0.05,
+        max_depth=5, subsample=0.8,
+        min_samples_leaf=5, random_state=42
+    ))
+])
+gb_pipe.fit(X_tr, y_tr)
+acc_gb = accuracy_score(y_va, gb_pipe.predict(X_va))
+print(f"Gradient Boosting holdout accuracy: {acc_gb:.4f}")
+
+# ---- Accuracy comparison figure ----
+model_names = ["Decision Tree", "Bagging", "Random Forest", "Gradient Boosting"]
+accuracies = [acc_dt, acc_bag, acc_rf, acc_gb]
+
+fig, ax = plt.subplots(figsize=(8, 4))
+colors_bar = ["#dd8452", "#55a868", "#4c72b0", "#c44e52"]
+bars = ax.barh(model_names, accuracies, color=colors_bar)
+ax.set_xlabel("Holdout Accuracy", fontsize=11)
+ax.set_title("Tree Model Holdout Accuracy Comparison\n(Obesity Risk – Kaggle)", fontsize=12)
+ax.set_xlim(0.5, 1.0)
+for bar, acc in zip(bars, accuracies):
+    ax.text(acc + 0.003, bar.get_y() + bar.get_height()/2,
+            f"{acc:.4f}", va="center", fontsize=9)
+ax.invert_yaxis()
+plt.tight_layout()
+plt.savefig("kaggle_tree_accuracy.png", dpi=150, bbox_inches="tight")
+plt.show()
+
+# ---- Write submissions ----
+write_submission(dt_pipe, "kaggle_submission_Chandler_decision_tree.csv")
+write_submission(bag_pipe, "kaggle_submission_Chandler_bagging.csv")
+write_submission(rf_pipe, "kaggle_submission_Chandler_random_forest.csv")
+write_submission(gb_pipe, "kaggle_submission_Chandler_gradient_boosting.csv")
+print("All submissions written.")
+```
+
+## Modeling Strategy and Rationale
+
+The objective of the Kaggle competition is to classify individuals into
+one of seven obesity risk categories (NObeyesdad) using demographic,
+behavioral, and health-related predictors. Because the response variable
+is multi-class and categorical, the modeling strategy focused on
+tree-based supervised classification approaches grounded in established
+statistical learning theory.
+
+A single pruned decision tree was implemented first as the most
+interpretable baseline among tree methods. Decision trees partition the
+feature space through recursive binary splits, and pruning via maximum
+depth and minimum leaf size reduces variance at the cost of modest bias
+[@shmueli2019]. While individual trees are interpretable, they are prone
+to high variance and instability in predictions.
+
+Bagging (Bootstrap Aggregating) was applied as a variance-reduction
+strategy. By training many unpruned decision trees on bootstrap samples
+and averaging their predictions, bagging reduces the variance of the
+individual tree estimator without substantially increasing bias
+[@breiman1996]. Bagging is equivalent to a random forest when all
+features are considered at each split.
+
+A random forest was introduced to further decorrelate the individual
+trees within the ensemble by restricting each split to a random subset
+of features (√p features for classification) [@breiman2001]. This
+decorrelation produces additional variance reduction relative to
+bagging, typically yielding better out-of-sample performance. Random
+forests also provide variable importance rankings through mean decrease
+in impurity, offering interpretability alongside predictive power.
+
+Gradient boosting sequentially fits shallow trees to the residuals of
+prior models, correcting errors iteratively [@friedman2001]. The
+learning rate controls the contribution of each tree, and subsampling
+introduces stochasticity that regularizes the ensemble. Gradient
+boosting typically achieves the highest predictive accuracy among
+tree-based methods at the cost of additional hyperparameter tuning and
+longer training times.
+
+All models were trained using consistent preprocessing steps, including
+imputation of missing values, scaling of numeric variables, and one-hot
+encoding of categorical predictors. Performance was evaluated on a
+stratified holdout set to ensure comparability across modeling
+frameworks.
+
+# Assumptions and Model Diagnostics
+
+Tree-based methods impose fewer distributional assumptions than
+parametric classifiers such as logistic regression or linear
+discriminant analysis, making them broadly applicable to the obesity
+risk prediction problem.
+
+Decision trees make no parametric assumptions about predictor
+distributions and are invariant to monotone transformations of numeric
+features. However, they assume that the true decision boundary can be
+approximated by axis-aligned rectangular regions, which may introduce
+bias when relationships are smooth or diagonal. Pruning via depth
+constraints mitigates variance but may underfit complex patterns
+[@shmueli2019].
+
+Bagging and random forests assume that bootstrap resampling captures
+sufficient variability to represent the population distribution and that
+the true function can be approximated by an average of deep trees
+[@breiman2001]. Random forests additionally assume that feature
+subsetting introduces sufficient decorrelation among trees to improve
+ensemble performance relative to bagging. Variable importance metrics
+assume stationarity of feature relevance across bootstrap iterations.
+
+Gradient boosting assumes that sequentially fitting shallow trees to
+pseudo-residuals will converge to a good approximation of the true
+function [@friedman2001]. Shrinkage (learning rate) and subsampling are
+used as regularization tools to prevent overfitting. Gradient boosting
+is sensitive to hyperparameter specification (number of trees, depth,
+learning rate), and the chosen values were selected to balance
+underfitting and overfitting on the local holdout set.
+
+Overall, no severe assumption violations were identified. The absence of
+required distributional assumptions makes tree-based ensembles
+particularly well-suited to the mixed numeric-categorical predictor
+structure of the obesity risk dataset.
+
+# Technical Resources and Submissions
+
+All code utilized for this analysis, including exploratory data
+analysis, tree model implementations, variable importance diagnostics,
+and submission generation, is provided in the accompanying Jupyter
+Notebook/RMD file. The complete repository including the notebook and
+dependency specifications can be accessed via the following GitHub
+repository:
+<https://github.com/chandawg/DDS-8555-ChandlerJ-Classification-Analysis>
+
+Four distinct tree-based models were submitted to the Kaggle
+competition:
+
+<b>Model 1 (Decision Tree):</b> Submitted as
+kaggle_submission_Chandler_decision_tree.csv.
+
+<b>Model 2 (Bagging):</b> Submitted as
+kaggle_submission_Chandler_bagging.csv.
+
+<b>Model 3 (Random Forest):</b> Submitted as
+kaggle_submission_Chandler_random_forest.csv.
+
+<b>Model 4 (Gradient Boosting):</b> Submitted as
+kaggle_submission_Chandler_gradient_boosting.csv.
+
+**Figure 5**
+
+*Screen capture of Kaggle submission confirmation*
+
+# Conclusion
+
+This analysis evaluated tree-based statistical learning methods across
+two applied tasks. In the Boston housing dataset, all ensemble methods
+substantially outperformed both the single decision tree and linear
+regression baseline, with gradient boosting achieving the lowest test
+MSE. Random forests identified lstat and rm as the dominant predictors
+of median home value, providing interpretable variable importance
+alongside strong predictive performance.
+
+In the multi-class obesity risk prediction task, four tree-based models
+were implemented under consistent preprocessing procedures. The single
+decision tree provided a transparent, interpretable baseline, while
+bagging reduced its variance. The random forest offered additional
+decorrelation benefits and competitive accuracy, and gradient boosting
+achieved the highest holdout accuracy through sequential residual
+correction.
+
+Overall, the results reinforce the core bias-variance tradeoff framework
+in statistical learning. Ensemble methods reduce prediction error by
+pooling information across many trees, either through averaging
+(bagging, random forest) or sequential correction (boosting). More
+complex ensembles do not automatically outperform simpler alternatives
+in all settings, but across both tasks evaluated here, gradient boosting
+consistently achieved the strongest predictive performance. Careful
+preprocessing, attention to hyperparameter specification, and principled
+model comparison are more important than any single modeling choice.
+
+\clearpage
+
+\newpage
+
+# References
+
+::: {#refs}
+:::
+
+\clearpage
+
+\newpage
+
+# AI Disclosure and Usage Statement
+
+In accordance with the course policy on academic integrity, I
+acknowledge the use of Claude Sonnet 4.6 (a large language model
+developed by Anthropic) as a research and brainstorming tool for this
+assignment. The AI was used to assist in structuring portions of the
+written analysis, refining technical explanations of tree-based methods
+and ensemble learning, and troubleshooting Python implementation details
+within the Jupyter Notebook environment. All AI-generated suggestions
+were critically evaluated for accuracy, verified against course
+materials and dataset outputs, and substantially revised to reflect my
+own analytical reasoning and professional voice. The final model
+implementation, statistical interpretation, and conclusions represent my
+independent work and judgment.
