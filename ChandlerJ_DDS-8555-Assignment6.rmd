@@ -58,7 +58,21 @@ py_config()
 
 # Executive Summary
 
-This analysis addresses two conceptual and applied problems in tree-based statistical learning. The first task involves constructing a custom recursive binary partition of two-dimensional feature space with at least six regions and its corresponding decision tree. The second applies boosting, bagging, random forests, and a decision tree to the Boston housing dataset, comparing their predictive performance against a linear regression baseline. Additionally, four tree-based models (a decision tree, a bagged ensemble, a random forest, and a gradient boosted classifier) were developed and submitted to the Kaggle Multi-Class Prediction of Obesity Risk competition. Across all contexts, ensemble methods consistently outperformed single-tree models, and gradient boosting achieved the strongest predictive performance. Random forests offered a strong balance of accuracy and interpretability through variable importance. These results are consistent with the bias-variance tradeoff framework central to modern statistical learning.
+This analysis addresses two conceptual and applied problems in
+tree-based statistical learning. The first task involves constructing a
+custom recursive binary partition of two-dimensional feature space with
+at least six regions and its corresponding decision tree. The second
+applies boosting, bagging, random forests, and a decision tree to the
+Boston housing dataset, comparing their predictive performance against a
+linear regression baseline. Additionally, four tree-based models (a
+decision tree, a bagged ensemble, a random forest, and a gradient
+boosted classifier) were developed and submitted to the Kaggle
+Multi-Class Prediction of Obesity Risk competition. Across all contexts,
+ensemble methods consistently outperformed single-tree models, and
+gradient boosting achieved the strongest predictive performance. Random
+forests offered a strong balance of accuracy and interpretability
+through variable importance. These results are consistent with the
+bias-variance tradeoff framework central to modern statistical learning.
 
 ## Key Insights
 
@@ -204,7 +218,21 @@ clinically meaningful boundaries without requiring pre-specification.
 
 ## Question 12 (Page 366) – Apply boosting, bagging, random forests, and BART to a data set of your choice. Be sure to fit the models on a training set and to evaluate their performance on a test set. How accurate are the results compared to simple methods like linear or logistic regression? Which of these approaches yields the best performance?
 
-The Boston housing dataset from the ISLP library was used for this analysis. The continuous response variable is medv (median home value). Four tree-based models (a single regression tree, bagging, a random forest, and gradient boosting) were fit to an 80/20 training-test split and compared against a linear regression baseline using mean squared error (MSE) as the evaluation metric. Gradient boosting consistently achieved the lowest test MSE, followed by random forests, reflecting the theoretical advantage of ensemble methods over single learners through variance reduction and sequential residual correction. Linear regression provided a useful interpretable baseline but was outperformed by all ensemble methods, highlighting the presence of nonlinear relationships in the data. Variable importance analysis from the random forest identified lstat (percentage of lower-status population) and rm (average number of rooms per dwelling) as the most influential predictors, consistent with domain knowledge in housing economics.
+The Boston housing dataset from the ISLP library was used for this
+analysis. The continuous response variable is medv (median home value).
+Four tree-based models (a single regression tree, bagging, a random
+forest, and gradient boosting) were fit to an 80/20 training-test split
+and compared against a linear regression baseline using mean squared
+error (MSE) as the evaluation metric. Gradient boosting consistently
+achieved the lowest test MSE, followed by random forests, reflecting the
+theoretical advantage of ensemble methods over single learners through
+variance reduction and sequential residual correction. Linear regression
+provided a useful interpretable baseline but was outperformed by all
+ensemble methods, highlighting the presence of nonlinear relationships
+in the data. Variable importance analysis from the random forest
+identified lstat (percentage of lower-status population) and rm (average
+number of rooms per dwelling) as the most influential predictors,
+consistent with domain knowledge in housing economics.
 
 **Figure 2**
 
@@ -225,6 +253,8 @@ from sklearn.ensemble import (BaggingRegressor, RandomForestRegressor,
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error
 from sklearn.inspection import permutation_importance
+from sklearn.linear_model import Ridge
+
 
 # ---- Load Boston data ----
 try:
@@ -250,8 +280,14 @@ def mse(model, Xte, yte):
     return mean_squared_error(yte, model.predict(Xte))
 
 # ---- Linear regression baseline ----
-lr = LinearRegression().fit(X_train, y_train)
+# lr = LinearRegression().fit(X_train, y_train)
+# mse_lr = mse(lr, X_test, y_test)
+
+
+# ---- Ridge Regression Baseline ----
+lr = Ridge(alpha=1.0).fit(X_train, y_train)
 mse_lr = mse(lr, X_test, y_test)
+print(f"Ridge Regression   Test MSE: {mse_lr:.3f}")
 
 # ---- Single Decision Tree (pruned via max_depth) ----
 dt = DecisionTreeRegressor(max_depth=5, random_state=42).fit(X_train, y_train)
@@ -277,7 +313,7 @@ mse_gb = mse(gb, X_test, y_test)
 
 # ---- Results Table ----
 results = pd.DataFrame({
-    "Model": ["Linear Regression", "Decision Tree", "Bagging", "Random Forest", "Gradient Boosting"],
+    "Model": ["Ridge Regression", "Decision Tree", "Bagging", "Random Forest", "Gradient Boosting"],
     "Test MSE": [round(mse_lr, 3), round(mse_dt, 3), round(mse_bag, 3),
                  round(mse_rf, 3), round(mse_gb, 3)]
 })
@@ -667,6 +703,8 @@ kaggle_submission_Chandler_random_forest.csv.
 
 <b>Model 4 (Gradient Boosting):</b> Submitted as
 kaggle_submission_Chandler_gradient_boosting.csv.
+
+![](images/clipboard-1655488650.png)
 
 **Figure 5**
 
